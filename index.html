@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Venn Diagram Creator</title>
+<style>
+:root{--bg:#f4f5f7;--surface:#fff;--ink:#1c2230;--muted:#5d6678;--line:#d8dce5;--accent:#3b5bdb;--accent-ink:#fff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#13161d;--surface:#1c212c;--ink:#e8ebf2;--muted:#9aa4b8;--line:#2f3646;--accent:#7b93ff;--accent-ink:#0f1320}}
+:root[data-theme="dark"]{--bg:#13161d;--surface:#1c212c;--ink:#e8ebf2;--muted:#9aa4b8;--line:#2f3646;--accent:#7b93ff;--accent-ink:#0f1320}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:18px}
+h1{font-size:1.5rem;margin:0 0 2px}
+.sub{color:var(--muted);margin:0 0 16px}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}
+@media(max-width:800px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+h2{font-size:.95rem;margin:14px 0 6px}
+h2:first-child{margin-top:0}
+.seg{display:flex;gap:6px}
+button{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 12px;border-radius:8px;cursor:pointer}
+button[aria-pressed="true"],button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.setrow{display:flex;gap:8px;margin:6px 0}
+.setrow input[type=text]{flex:1;min-width:0}
+input[type=text],textarea{font:inherit;width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+input[type=color]{width:44px;height:38px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+textarea{min-height:64px;resize:vertical}
+label{display:block;font-size:.82rem;color:var(--muted);margin:8px 0 2px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.stage{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stage svg{display:block;width:100%;height:auto}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.msg{color:var(--muted);font-size:.85rem;min-height:1.3em;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Venn diagram creator</h1>
+<p class="sub">Name your sets, type one item per line in each region, and download the result.</p>
+<div class="grid">
+<div class="panel">
+<h2>Number of sets</h2>
+<div class="seg"><button data-n="2" aria-pressed="false">2 sets</button><button data-n="3" aria-pressed="true">3 sets</button></div>
+<h2>Sets</h2>
+<div id="sets"></div>
+<h2>Items <span style="font-weight:400;color:var(--muted)">(one per line)</span></h2>
+<div id="regions"></div>
+<h2>Text size</h2>
+<input type="range" id="fs" min="10" max="22" value="14" aria-label="Text size">
+</div>
+<div>
+<div class="stage" id="stage"></div>
+<div class="btns">
+<button class="primary" id="dsvg">Download SVG</button>
+<button class="primary" id="dpng">Download PNG</button>
+<button id="copy">Copy SVG code</button>
+<button id="reset">Reset</button>
+</div>
+<div class="msg" id="msg" role="status"></div>
+</div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const COLORS=["#e8590c","#1c7ed6","#2f9e44"];
+const SAMPLE={A:"Python\nSQL",B:"Typography\nColor theory",C:"Statistics\nR",AB:"Frontend\nprototyping",AC:"Machine learning",BC:"Data\nvisualization",ABC:"Interactive\ndashboards"};
+const NAMES=["Can code","Loves design","Loves data"];
+let S={n:3,names:[...NAMES],colors:[...COLORS],items:{...SAMPLE},fs:14};
+
+// geometry: viewBox, circle centers/radius, label positions, region anchor points
+const G={
+ 2:{w:600,h:440,r:150,c:[[230,235],[370,235]],lab:[[170,52],[430,52]],
+  reg:{A:[150,235],B:[450,235],AB:[300,235]}},
+ 3:{w:600,h:540,r:140,c:[[235,215],[365,215],[300,320]],lab:[[170,52],[430,52],[300,510]],
+  reg:{A:[180,175],B:[420,175],C:[300,405],AB:[300,155],AC:[243,300],BC:[357,300],ABC:[300,250]}}
+};
+const REGION_LABEL=(k)=>{const L=[...k].map(c=>S.names["ABC".indexOf(c)]||c);return L.length===1?L[0]+" only":L.length===S.n?"All sets":L.join(" + ")};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function buildControls(){
+ $("sets").innerHTML=S.names.slice(0,S.n).map((nm,i)=>`<div class="setrow"><input type="text" data-name="${i}" value="${esc(nm)}" aria-label="Set ${i+1} name"><input type="color" data-color="${i}" value="${S.colors[i]}" aria-label="Set ${i+1} color"></div>`).join("");
+ const keys=Object.keys(G[S.n].reg);
+ $("regions").innerHTML=keys.map(k=>`<label for="r-${k}" data-lab="${k}">${esc(REGION_LABEL(k))}</label><textarea id="r-${k}" data-reg="${k}">${esc(S.items[k]||"")}</textarea>`).join("");
+}
+function svg(){
+ const g=G[S.n],lh=S.fs*1.3;
+ let o=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${g.w} ${g.h}" width="${g.w}" height="${g.h}" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif"><rect width="100%" height="100%" fill="#ffffff"/>`;
+ g.c.forEach((c,i)=>{o+=`<circle cx="${c[0]}" cy="${c[1]}" r="${g.r}" fill="${S.colors[i]}" fill-opacity="0.35" stroke="${S.colors[i]}" stroke-width="2.5"/>`});
+ g.lab.forEach((p,i)=>{o+=`<text x="${p[0]}" y="${p[1]}" text-anchor="middle" font-size="${Math.max(S.fs+4,18)}" font-weight="700" fill="#1c2230">${esc(S.names[i])}</text>`});
+ for(const k in g.reg){
+  const lines=(S.items[k]||"").split("\n").map(s=>s.trim()).filter(Boolean);
+  const [x,y]=g.reg[k];const y0=y-(lines.length-1)*lh/2+S.fs*0.35;
+  lines.forEach((t,j)=>{o+=`<text x="${x}" y="${(y0+j*lh).toFixed(1)}" text-anchor="middle" font-size="${S.fs}" fill="#1c2230">${esc(t)}</text>`});
+ }
+ return o+"</svg>";
+}
+function draw(){$("stage").innerHTML=svg()}
+function setMsg(t){$("msg").textContent=t}
+
+document.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{
+ S.n=+b.dataset.n;document.querySelectorAll("[data-n]").forEach(x=>x.setAttribute("aria-pressed",x===b));buildControls();draw();
+});
+$("sets").addEventListener("input",e=>{
+ const t=e.target;
+ if(t.dataset.name!==undefined){S.names[+t.dataset.name]=t.value;document.querySelectorAll("[data-lab]").forEach(l=>l.textContent=REGION_LABEL(l.dataset.lab))}
+ if(t.dataset.color!==undefined)S.colors[+t.dataset.color]=t.value;
+ draw();
+});
+$("regions").addEventListener("input",e=>{if(e.target.dataset.reg){S.items[e.target.dataset.reg]=e.target.value;draw()}});
+$("fs").oninput=()=>{S.fs=+$("fs").value;draw()};
+$("reset").onclick=()=>{S={n:S.n,names:[...NAMES],colors:[...COLORS],items:{...SAMPLE},fs:14};$("fs").value=14;buildControls();draw();setMsg("Reset to the sample diagram.")};
+
+let dl=null;
+(async()=>{try{if(window.claude&&claude.use)dl=await claude.use("downloads")}catch(e){dl=null}
+ if(!dl){$("dsvg").hidden=true;$("dpng").hidden=true;setMsg("Downloads aren’t available in this view. Use “Copy SVG code” and save it as a .svg file.")}})();
+
+async function save(name,data){
+ try{await dl.save({filename:name,data});setMsg("Saved "+name+".")}
+ catch(e){setMsg(e&&e.code==="declined"?"Download cancelled.":"Couldn’t save the file here. Try “Copy SVG code”.")}
+}
+$("dsvg").onclick=()=>save("venn-diagram.svg",svg());
+$("dpng").onclick=()=>{
+ const g=G[S.n],img=new Image();
+ img.onload=()=>{const c=document.createElement("canvas");c.width=g.w*2;c.height=g.h*2;
+  const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
+  c.toBlob(b=>b?save("venn-diagram.png",b):setMsg("Couldn’t create the PNG."),"image/png")};
+ img.onerror=()=>setMsg("Couldn’t create the PNG.");
+ img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg());
+};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText(svg());setMsg("SVG code copied.")}catch(e){setMsg("Copy isn’t available here.")}};
+
+buildControls();draw();
+</script>
+</body>
+</html>
